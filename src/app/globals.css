@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+:root {
+  --bg-main: #f7f8f6;
+  --surface-card: #ffffff;
+  --border-soft: #e4e9e5;
+  --text-primary: #26302d;
+  --text-muted: #5c6b66;
+  --accent-sage: #3d6b5e;
+  --accent-sage-dark: #2f574b;
+}
+
+html {
+  /* Fluid base font size so laptop screens with 125%-150% scaling never look oversized */
+  font-size: 14.5px;
+  -webkit-text-size-adjust: 100%;
+}
+
+@media (max-height: 760px) and (min-width: 1024px) {
+  html {
+    font-size: 13.5px;
+  }
+}
+
+body {
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* Subtle scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd4ce;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #aab8b0;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #printable-receipt,
+  #printable-receipt * {
+    visibility: visible;
+  }
+  #printable-receipt {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-width: 340px;
+    margin: 0 auto;
+    box-shadow: none !important;
+    border: none !important;
+    background: white !important;
+  }
+}
