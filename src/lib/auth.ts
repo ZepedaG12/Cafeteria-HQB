@@ -58,6 +58,13 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 }
 
 export function getLanUrls(port = 3000): string[] {
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return [`https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`];
+  }
+  if (process.env.VERCEL_URL) {
+    return [`https://${process.env.VERCEL_URL}`];
+  }
+
   const nets = os.networkInterfaces();
   const urls: string[] = [];
 

@@ -315,7 +315,7 @@ export default function CafeteriaHomePage() {
               >
                 <Wifi className="w-3.5 h-3.5" />
                 <span className="truncate max-w-[145px]">
-                  {lanUrls[0].replace('http://', '')}
+                  {lanUrls[0].replace(/^https?:\/\//, '')}
                 </span>
               </button>
             )}

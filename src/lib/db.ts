@@ -1,10 +1,21 @@
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { hashPassword } from './auth';
 import { CafeteriaDatabase, UserAccount } from './types';
 
-const DATA_DIR = path.join(process.cwd(), 'data');
+const IS_SERVERLESS = Boolean(
+  process.env.VERCEL ||
+    process.env.AWS_LAMBDA_FUNCTION_NAME ||
+    process.env.NETLIFY
+);
+
+const DATA_DIR = IS_SERVERLESS
+  ? path.join(os.tmpdir(), 'vitalimarket-data')
+  : path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'cafeteria-hospital-db.json');
+
+let memoryFallbackDb: CafeteriaDatabase | null = null;
 
 export function getDefaultUsers(): UserAccount[] {
   return [
@@ -801,19 +812,28 @@ export function readDb(): CafeteriaDatabase {
     }
 
     if (mutated) {
-      fs.writeFileSync(DB_FILE, JSON.stringify(parsed, null, 2), 'utf-8');
+      writeDb(parsed);
     }
 
+    memoryFallbackDb = parsed;
     return parsed;
   } catch (err) {
-    console.error('Error reading DB, returning seed data:', err);
-    return getInitialSeedData();
+    console.error('Error reading DB, using memory/seed fallback:', err);
+    if (!memoryFallbackDb) {
+      memoryFallbackDb = getInitialSeedData();
+    }
+    return memoryFallbackDb;
   }
 }
 
 export function writeDb(data: CafeteriaDatabase): void {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+  memoryFallbackDb = data;
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('Filesystem read-only, persisted in memory:', err);
   }
-  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
 }
