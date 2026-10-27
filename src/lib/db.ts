@@ -20,12 +20,28 @@ let memoryFallbackDb: CafeteriaDatabase | null = null;
 let neonTableInitialized = false;
 
 export function getDatabaseUrl(): string | null {
-  const url =
+  const direct =
     process.env.DATABASE_URL ||
     process.env.POSTGRES_URL ||
     process.env.NEON_DATABASE_URL ||
+    process.env.STORAGE_DATABASE_URL ||
+    process.env.STORAGE_POSTGRES_URL ||
+    process.env.POSTGRES_URL_NON_POOLING ||
     '';
-  return url.trim() ? url.trim() : null;
+  if (direct.trim()) return direct.trim();
+
+  // Detectar prefijos personalizados de Vercel Storage / Neon Marketplace (ej. CAFE_DATABASE_URL)
+  for (const [key, val] of Object.entries(process.env)) {
+    if (
+      val &&
+      (key.endsWith('_DATABASE_URL') || key.endsWith('_POSTGRES_URL') || key.endsWith('_URL')) &&
+      /^postgres(ql)?:\/\//i.test(val.trim())
+    ) {
+      return val.trim();
+    }
+  }
+
+  return null;
 }
 
 export function getStorageMode(): 'neon_postgres' | 'local_file' | 'serverless_tmp' {
