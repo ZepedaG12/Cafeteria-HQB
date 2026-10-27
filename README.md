@@ -1,34 +1,26 @@
-# VitaliMarket & Café — Sistema de Tienda y Cafetería Hospitalaria
+# Camila's Coffee — Sistema de Tienda y Cafetería Hospitalaria
 
-Aplicación web full-stack desarrollada en **Next.js (App Router) + TypeScript + Tailwind CSS**, adaptada para teléfonos móviles, tablets, laptops y pantallas de escritorio, con control de acceso por roles, facturación en **Lempiras (`L`)**, soporte para **RTN**, descuentos por porcentaje (`%`) y acceso nativo en red local (**LAN**).
+Aplicación web full-stack lista para producción desarrollada en **Next.js (App Router) + TypeScript + Tailwind CSS**, adaptada para teléfonos móviles, tablets, laptops y escritorio, con facturación en **Lempiras (`L`)**, soporte para **RTN**, descuentos por porcentaje (`%`), **Créditos de Empleados Hospitalarios**, **Reporte Contable Mensual en Excel con Gráficos** y soporte dual de base de datos (**Neon Postgres** en Vercel / **JSON Local** en LAN).
 
 ## Características Principales
-- **Punto de Venta (POS) e Historial:** Cobro rápido en **Lempiras (`L`)**, cálculo de cambio en efectivo, descuentos por **porcentaje (`%`)**, registro de **RTN** y emisión de Tickets y Facturas imprimibles.
-- **Gestión de Inventario y Kardex:** Control de stock de productos terminados e insumos (con descuento automático por unidad o por receta de insumos), registro de entradas por compras y bajas por vencimiento o mermas.
-- **Control de Gastos Operativos:** Registro de egresos fijos y variables de operación hospitalaria.
-- **Ganancias y Conteo Físico:** Estado de resultados con Utilidad Neta Real y comparador de auditoría física vs. stock en sistema.
-- **Diseño Responsivo y Ajustable:** Interfaz con botones de acción siempre visibles, barra inferior móvil y cajón deslizable en tablets/celulares.
+- **Punto de Venta (POS) e Historial:** Cobro rápido en **Lempiras (`L`)** mediante **Efectivo**, **Tarjeta**, **Transferencia** o **Crédito de Empleado**, cálculo de cambio, descuentos por **porcentaje (`%`)**, registro de **RTN** y emisión de Tickets y Facturas imprimibles.
+- **Créditos de Empleados Hospitalarios (`Créditos`):** Registro de cuentas por cobrar del personal médico/hospitalario, registro de abonos parciales o cancelación total conforme vayan abonando, historial detallado de consumos/pagos y exportación a **Excel (`.xlsx`)**.
+- **Reporte Mensual Contable en Excel con Gráficos (`Reportes / Excel`):** Selección de **Mes y Año** con vista previa interactiva y descarga de libro Excel (`DESCRIPCIÓN`, `ENTRADAS`, `SALIDAS`, `RESUMEN`) con **2 gráficos incrustados** (Ventas por Modalidad y Comparativo Venta vs. Compras/Gastos vs. Ganancia + Movimiento de Efectivo).
+- **Gestión de Inventario y Kardex:** Control de stock de productos terminados e insumos (descuento directo o por receta), compras a proveedores y bajas por mermas/vencimientos.
+- **Base de Datos Permanente en Nube (Neon Postgres):** Compatible automáticamente con `DATABASE_URL` / `POSTGRES_URL` para despliegues permanentes gratuitos en **Vercel + Neon Postgres**, manteniendo respaldo local en red LAN cuando se corre sin internet.
 
-## Credenciales de Acceso por Defecto
+## Credenciales de Acceso Iniciales
 
 | Rol | Usuario | Contraseña | Permisos de Módulos |
 | :--- | :--- | :--- | :--- |
-| **Operador** | `operador` | `caja123` | **Ventas** (Punto de Venta e Historial) e **Inventario** (Catálogo, Entradas, Salidas y Kardex) |
-| **Administrador** | `admin` | `admin123` | **Acceso total:** Ventas, Inventario, Gastos Operativos, Ganancias y Auditoría, Resumen General y Gestión de Usuarios / Red LAN |
+| **Operador** | `operador` | `caja123` | **Ventas** (POS e Historial), **Créditos** (ventas al crédito y recepción de abonos) e **Inventario** |
+| **Administrador** | `admin` | `admin123` | **Acceso total:** Ventas, Créditos (incl. eliminar cuentas), Inventario, Gastos, Reportes Mensuales / Excel, Resumen y Usuarios / Red |
 
-*(Desde el módulo **Usuarios / LAN**, el administrador puede crear más usuarios operadores o administradores, cambiar contraseñas o activar/desactivar cuentas).*
+## Despliegue en Producción con Vercel + Neon Postgres (Gratis \$0/mes)
+1. Importa este repositorio (`ZepedaG12/Cafeteria-HQB`) en [Vercel](https://vercel.com).
+2. En tu proyecto de Vercel, entra a la pestaña **Storage** → **Create Database** → selecciona **Neon (Serverless Postgres)** → Plan **Free** → **Connect**.
+3. Vercel agregará automáticamente la variable `DATABASE_URL` a tu proyecto. Haz **Redeploy** (o se desplegará al instante) y la tabla `camilas_coffee_store` se creará e inicializará sola en el primer ingreso.
 
-## Ejecución y Acceso en Red Local (LAN)
-
-### Opción rápida en Windows (Recomendada para red local LAN)
-1. Ejecuta como Administrador `abrir-puerto-firewall-lan.bat` (solo la primera vez) para permitir conexiones entrantes al puerto `3000` en el Firewall de Windows.
-2. Ejecuta `iniciar-servicio-lan.bat` para compilar e iniciar el servidor escuchando en `0.0.0.0:3000` y ver en pantalla las direcciones IP para conectarte desde celulares, tablets u otras PCs en la misma red Wi-Fi / Ethernet.
-
-### Modo desarrollo por consola
-```bash
-npm install
-npm run dev
-```
-
-- **En esta PC:** `http://localhost:3000`
-- **Desde celulares, tablets u otras PCs en la misma red:** usa la dirección IP local mostrada en el módulo **Usuarios / LAN** o en la consola (ej. `http://192.168.x.x:3000`).
+## Ejecución en Red Local (LAN)
+1. Ejecuta una vez `abrir-puerto-firewall-lan.bat` como Administrador.
+2. Inicia el servicio con `iniciar-servicio-lan.bat` (o `npm run dev` en desarrollo).

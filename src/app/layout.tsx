@@ -2,9 +2,9 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'VitaliMarket & Café | Tienda y Cafetería Hospitalaria',
+  title: "Camila's Coffee | Tienda y Cafetería Hospitalaria",
   description:
-    'Sistema web responsive de ventas, inventario, gastos y ganancias para tienda y cafetería dentro de hospital.',
+    "Sistema de ventas, créditos de empleados, inventario, gastos y reportes contables para Camila's Coffee.",
 };
 
 export const viewport: Viewport = {

@@ -12,6 +12,7 @@ import {
   Check,
   X,
   Power,
+  Database,
 } from 'lucide-react';
 import { CafeteriaDatabase, SessionUser, UserAccount, UserRole } from '@/lib/types';
 
@@ -19,6 +20,7 @@ interface UsersAndLanModuleProps {
   db: CafeteriaDatabase;
   currentUser: SessionUser;
   lanUrls: string[];
+  storageMode?: 'neon_postgres' | 'local_file' | 'serverless_tmp';
   onRefresh: (newDb: CafeteriaDatabase) => void;
 }
 
@@ -26,6 +28,7 @@ export default function UsersAndLanModule({
   db,
   currentUser,
   lanUrls,
+  storageMode = 'local_file',
   onRefresh,
 }: UsersAndLanModuleProps) {
   const [modalOpen, setModalOpen] = useState(false);
@@ -166,7 +169,7 @@ export default function UsersAndLanModule({
                         </>
                       ) : (
                         <>
-                          <ShoppingBag className="w-3 h-3" /> Operador (Ventas e Inventario)
+                          <ShoppingBag className="w-3 h-3" /> Operador (Ventas, Inventario y Créditos)
                         </>
                       )}
                     </span>
@@ -254,6 +257,35 @@ export default function UsersAndLanModule({
                 </div>
               ))
             )}
+          </div>
+
+          <div
+            className={`p-3 rounded-xl border text-[11px] space-y-1 ${
+              storageMode === 'serverless_tmp'
+                ? 'bg-[#FDF5E8] border-[#EDE6D8] text-[#9A6728]'
+                : 'bg-[#EEF5F2] border-[#CFE0D8] text-[#2F574B]'
+            }`}
+          >
+            <div className="flex items-center justify-between font-semibold">
+              <span className="inline-flex items-center gap-1.5">
+                <Database className="w-3.5 h-3.5" />
+                Motor de Base de Datos Activo:
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-white text-[10px]">
+                {storageMode === 'neon_postgres'
+                  ? 'Neon Postgres (Nube Permanente)'
+                  : storageMode === 'serverless_tmp'
+                  ? 'Temporal (Conecta Neon en Vercel)'
+                  : 'Archivo Local (LAN)'}
+              </span>
+            </div>
+            <p>
+              {storageMode === 'neon_postgres'
+                ? 'Conectado a Neon Postgres (DATABASE_URL). Ventas, inventario y créditos se guardan permanentemente en la nube.'
+                : storageMode === 'serverless_tmp'
+                ? 'En Vercel entra a Storage -> Create Database -> Neon Postgres -> Connect para activar guardado permanente automático.'
+                : 'Guardando localmente en la PC. Al desplegar en Vercel con DATABASE_URL, se activará Neon Postgres automáticamente.'}
+            </p>
           </div>
 
           <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#EDE6D8] text-[11px] text-[#5C6B66] space-y-1">
@@ -350,7 +382,7 @@ export default function UsersAndLanModule({
                     >
                       <div className="font-semibold">Operador</div>
                       <div className="text-[11px] text-[#5C6B66]">
-                        Solo tiene acceso a los módulos de Ventas e Inventarios.
+                        Acceso a Ventas, Inventarios y Créditos de Empleados (cobros y abonos).
                       </div>
                     </button>
 

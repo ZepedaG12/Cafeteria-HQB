@@ -1,8 +1,8 @@
 @echo off
-title VitaliMarket y Cafe - Servicio Web en Red Local (LAN)
+title Camila's Coffee - Servicio Web en Red Local (LAN)
 cd /d "%~dp0"
 echo =========================================================
-echo   VITALIMARKET ^& CAFE - SERVICIO WEB HOSPITALARIO (LAN)
+echo   CAMILA'S COFFEE - SERVICIO WEB HOSPITALARIO (LAN)
 echo =========================================================
 echo.
 if not exist ".next\BUILD_ID" (

@@ -4,15 +4,29 @@ import { getInitialSeedData, readDb, writeDb } from '@/lib/db';
 import {
   AuditItemComparison,
   CafeteriaDatabase,
+  EmployeeCreditAccount,
   InventoryItem,
   InventoryMovement,
   OperatingExpense,
   PhysicalAuditRecord,
+  SalePaymentMethod,
   SaleTransaction,
   SessionUser,
   UserAccount,
   UserRole,
 } from '@/lib/types';
+
+function recalcCreditAccount(account: EmployeeCreditAccount) {
+  const totalCharged = Number(
+    account.charges.reduce((acc, c) => acc + Number(c.amount || 0), 0).toFixed(2)
+  );
+  const totalPaid = Number(
+    account.payments.reduce((acc, p) => acc + Number(p.amount || 0), 0).toFixed(2)
+  );
+  account.totalCharged = totalCharged;
+  account.totalPaid = totalPaid;
+  account.balance = Number(Math.max(0, totalCharged - totalPaid).toFixed(2));
+}
 
 function sanitizeDbForRole(db: CafeteriaDatabase, user: SessionUser) {
   if (user.role === 'administrador') {
@@ -25,12 +39,13 @@ function sanitizeDbForRole(db: CafeteriaDatabase, user: SessionUser) {
     };
   }
 
-  // Operador: solo tiene acceso a Ventas e Inventario
+  // Operador: acceso a Ventas, Inventario y Créditos de Empleados (para cobrar abonos en caja)
   return {
     users: [],
     inventory: db.inventory,
     movements: db.movements,
     sales: db.sales,
+    credits: db.credits || [],
     expenses: [],
     audits: [],
   };
@@ -42,7 +57,7 @@ export async function GET() {
     return NextResponse.json({ error: 'No autenticado.' }, { status: 401 });
   }
 
-  const db = readDb();
+  const db = await readDb();
   return NextResponse.json(sanitizeDbForRole(db, user));
 }
 
@@ -50,12 +65,15 @@ export async function POST(request: Request) {
   try {
     const user = await getSessionUser();
     if (!user) {
-      return NextResponse.json({ error: 'Sesión expirada. Inicia sesión nuevamente.' }, { status: 401 });
+      return NextResponse.json(
+        { error: 'Sesión expirada. Inicia sesión nuevamente.' },
+        { status: 401 }
+      );
     }
 
     const body = await request.json();
     const { action, payload } = body;
-    const db = readDb();
+    const db = await readDb();
     const nowIso = new Date().toISOString();
 
     const adminOnlyActions = [
@@ -64,6 +82,7 @@ export async function POST(request: Request) {
       'create_audit',
       'save_user',
       'toggle_user',
+      'delete_credit_account',
       'reset_demo',
     ];
 
@@ -118,7 +137,7 @@ export async function POST(request: Request) {
         db.inventory.push(newItem);
       }
 
-      writeDb(db);
+      await writeDb(db);
       return NextResponse.json({ ok: true, db: sanitizeDbForRole(db, user) });
     }
 
@@ -175,7 +194,7 @@ export async function POST(request: Request) {
       };
 
       db.movements.unshift(movement);
-      writeDb(db);
+      await writeDb(db);
       return NextResponse.json({ ok: true, db: sanitizeDbForRole(db, user), movement });
     }
 
@@ -186,6 +205,8 @@ export async function POST(request: Request) {
         customerProfile,
         documentType,
         paymentMethod,
+        creditAccountId,
+        newCreditEmployee,
         items,
         discountPercent = 0,
         amountReceived,
@@ -197,6 +218,43 @@ export async function POST(request: Request) {
           { error: 'La venta debe incluir al menos un producto.' },
           { status: 400 }
         );
+      }
+
+      const isCreditSale = paymentMethod === 'Crédito';
+      let targetCreditAccount: EmployeeCreditAccount | undefined;
+
+      if (isCreditSale) {
+        if (newCreditEmployee && String(newCreditEmployee.employeeName || '').trim()) {
+          const createdAcc: EmployeeCreditAccount = {
+            id: `cred-${Date.now()}`,
+            employeeName: String(newCreditEmployee.employeeName).trim(),
+            department: String(newCreditEmployee.department || 'Personal Hospitalario').trim(),
+            employeeCodeOrPhone: String(newCreditEmployee.employeeCodeOrPhone || '').trim(),
+            creditLimit: Number(newCreditEmployee.creditLimit || 0),
+            totalCharged: 0,
+            totalPaid: 0,
+            balance: 0,
+            charges: [],
+            payments: [],
+            active: true,
+            createdAt: nowIso,
+            updatedAt: nowIso,
+          };
+          db.credits.unshift(createdAcc);
+          targetCreditAccount = createdAcc;
+        } else if (creditAccountId) {
+          targetCreditAccount = db.credits.find((c) => c.id === creditAccountId);
+        }
+
+        if (!targetCreditAccount) {
+          return NextResponse.json(
+            {
+              error:
+                'Para ventas al Crédito debes seleccionar un empleado del hospital o registrar uno nuevo.',
+            },
+            { status: 400 }
+          );
+        }
       }
 
       const prefix = documentType === 'Factura' ? 'FAC' : 'TIC';
@@ -290,21 +348,51 @@ export async function POST(request: Request) {
       const cleanDiscountPercent = Math.min(100, Math.max(0, Number(discountPercent) || 0));
       const cleanDiscount = Number(((subtotal * cleanDiscountPercent) / 100).toFixed(2));
       const total = Number(Math.max(0, subtotal - cleanDiscount).toFixed(2));
-      const cleanReceived =
-        paymentMethod === 'Efectivo' && Number(amountReceived) >= total
-          ? Number(amountReceived)
-          : total;
-      const changeGiven = Number(Math.max(0, cleanReceived - total).toFixed(2));
 
+      if (
+        isCreditSale &&
+        targetCreditAccount &&
+        targetCreditAccount.creditLimit &&
+        targetCreditAccount.creditLimit > 0 &&
+        targetCreditAccount.balance + total > targetCreditAccount.creditLimit
+      ) {
+        return NextResponse.json(
+          {
+            error: `El monto supera el límite de crédito de ${targetCreditAccount.employeeName} (Disponible: L ${(
+              targetCreditAccount.creditLimit - targetCreditAccount.balance
+            ).toFixed(2)}).`,
+          },
+          { status: 400 }
+        );
+      }
+
+      const cleanReceived = isCreditSale
+        ? 0
+        : paymentMethod === 'Efectivo' && Number(amountReceived) >= total
+        ? Number(amountReceived)
+        : total;
+      const changeGiven = isCreditSale
+        ? 0
+        : Number(Math.max(0, cleanReceived - total).toFixed(2));
+
+      const resolvedCustomerName =
+        isCreditSale && targetCreditAccount
+          ? targetCreditAccount.employeeName
+          : customerName?.trim() || 'Consumidor Final';
+
+      const saleId = `sale-${Date.now()}`;
       const newSale: SaleTransaction = {
-        id: `sale-${Date.now()}`,
+        id: saleId,
         invoiceNumber,
         date: nowIso,
-        customerName: customerName?.trim() || 'Consumidor Final',
+        customerName: resolvedCustomerName,
         customerRtn: customerRtn?.trim() || 'C/F',
-        customerProfile: customerProfile || 'Visitante / Familiar',
+        customerProfile: isCreditSale
+          ? 'Personal Médico / Staff'
+          : customerProfile || 'Visitante / Familiar',
         documentType: documentType || 'Ticket',
-        paymentMethod: paymentMethod || 'Efectivo',
+        paymentMethod: (paymentMethod as SalePaymentMethod) || 'Efectivo',
+        creditAccountId: targetCreditAccount?.id,
         items: processedItems,
         subtotal,
         discountPercent: cleanDiscountPercent,
@@ -314,12 +402,185 @@ export async function POST(request: Request) {
         amountReceived: cleanReceived,
         changeGiven,
         cashier: user.fullName,
-        notes: notes?.trim() || '',
+        notes:
+          notes?.trim() ||
+          (isCreditSale && targetCreditAccount
+            ? `Crédito empleado (${targetCreditAccount.department})`
+            : ''),
       };
 
+      if (isCreditSale && targetCreditAccount) {
+        targetCreditAccount.charges.unshift({
+          id: `chg-${Date.now()}`,
+          date: nowIso,
+          saleId,
+          invoiceNumber,
+          description: processedItems
+            .map((i) => `${i.quantity}x ${i.productName}`)
+            .join(', '),
+          amount: total,
+          createdBy: user.fullName,
+        });
+        targetCreditAccount.updatedAt = nowIso;
+        recalcCreditAccount(targetCreditAccount);
+      }
+
       db.sales.unshift(newSale);
-      writeDb(db);
+      await writeDb(db);
       return NextResponse.json({ ok: true, db: sanitizeDbForRole(db, user), sale: newSale });
+    }
+
+    // GESTIÓN DE CRÉDITOS DE EMPLEADOS DEL HOSPITAL
+    if (action === 'save_credit_account') {
+      const {
+        id,
+        employeeName,
+        department,
+        employeeCodeOrPhone,
+        creditLimit,
+        initialChargeAmount,
+        initialChargeDescription,
+      } = payload;
+
+      const cleanName = String(employeeName || '').trim();
+      const cleanDept = String(department || '').trim() || 'Personal Hospitalario';
+
+      if (!cleanName) {
+        return NextResponse.json(
+          { error: 'Ingresa el nombre completo del empleado.' },
+          { status: 400 }
+        );
+      }
+
+      if (id) {
+        const idx = db.credits.findIndex((c) => c.id === id);
+        if (idx === -1) {
+          return NextResponse.json({ error: 'Empleado no encontrado.' }, { status: 404 });
+        }
+        db.credits[idx] = {
+          ...db.credits[idx],
+          employeeName: cleanName,
+          department: cleanDept,
+          employeeCodeOrPhone: String(employeeCodeOrPhone || '').trim(),
+          creditLimit: Number(creditLimit || 0),
+          updatedAt: nowIso,
+        };
+      } else {
+        const newAccount: EmployeeCreditAccount = {
+          id: `cred-${Date.now()}`,
+          employeeName: cleanName,
+          department: cleanDept,
+          employeeCodeOrPhone: String(employeeCodeOrPhone || '').trim(),
+          creditLimit: Number(creditLimit || 0),
+          totalCharged: 0,
+          totalPaid: 0,
+          balance: 0,
+          charges: [],
+          payments: [],
+          active: true,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        };
+
+        const initAmt = Number(initialChargeAmount || 0);
+        if (initAmt > 0) {
+          newAccount.charges.push({
+            id: `chg-${Date.now()}`,
+            date: nowIso,
+            description:
+              String(initialChargeDescription || '').trim() || 'Saldo inicial / Consumo registrado',
+            amount: Number(initAmt.toFixed(2)),
+            createdBy: user.fullName,
+          });
+          recalcCreditAccount(newAccount);
+        }
+
+        db.credits.unshift(newAccount);
+      }
+
+      await writeDb(db);
+      return NextResponse.json({ ok: true, db: sanitizeDbForRole(db, user) });
+    }
+
+    if (action === 'add_credit_charge') {
+      const { accountId, amount, description } = payload;
+      const idx = db.credits.findIndex((c) => c.id === accountId);
+      if (idx === -1) {
+        return NextResponse.json({ error: 'Cuenta de crédito no encontrada.' }, { status: 404 });
+      }
+      const cleanAmt = Number(Number(amount || 0).toFixed(2));
+      if (cleanAmt <= 0) {
+        return NextResponse.json({ error: 'El monto del cargo debe ser mayor a 0.' }, { status: 400 });
+      }
+
+      const acc = db.credits[idx];
+      if (acc.creditLimit && acc.creditLimit > 0 && acc.balance + cleanAmt > acc.creditLimit) {
+        return NextResponse.json(
+          {
+            error: `Este cargo supera el límite de crédito asignado (L ${acc.creditLimit.toFixed(2)}).`,
+          },
+          { status: 400 }
+        );
+      }
+
+      acc.charges.unshift({
+        id: `chg-${Date.now()}`,
+        date: nowIso,
+        description: String(description || '').trim() || 'Cargo manual en cafetería',
+        amount: cleanAmt,
+        createdBy: user.fullName,
+      });
+      acc.updatedAt = nowIso;
+      recalcCreditAccount(acc);
+
+      await writeDb(db);
+      return NextResponse.json({ ok: true, db: sanitizeDbForRole(db, user) });
+    }
+
+    if (action === 'register_credit_payment') {
+      const { accountId, amount, paymentMethod, notes } = payload;
+      const idx = db.credits.findIndex((c) => c.id === accountId);
+      if (idx === -1) {
+        return NextResponse.json({ error: 'Cuenta de crédito no encontrada.' }, { status: 404 });
+      }
+
+      const acc = db.credits[idx];
+      if (acc.balance <= 0) {
+        return NextResponse.json(
+          { error: 'Este empleado ya tiene su saldo en L 0.00.' },
+          { status: 400 }
+        );
+      }
+
+      const rawAmt = Number(Number(amount || 0).toFixed(2));
+      if (rawAmt <= 0) {
+        return NextResponse.json(
+          { error: 'Ingresa un monto de abono válido mayor a 0.' },
+          { status: 400 }
+        );
+      }
+
+      const appliedAmt = Math.min(acc.balance, rawAmt);
+      acc.payments.unshift({
+        id: `pay-${Date.now()}`,
+        date: nowIso,
+        amount: appliedAmt,
+        paymentMethod: paymentMethod || 'Efectivo',
+        notes: String(notes || '').trim() || 'Abono a cuenta',
+        receivedBy: user.fullName,
+      });
+      acc.updatedAt = nowIso;
+      recalcCreditAccount(acc);
+
+      await writeDb(db);
+      return NextResponse.json({ ok: true, db: sanitizeDbForRole(db, user) });
+    }
+
+    if (action === 'delete_credit_account') {
+      const { id } = payload;
+      db.credits = db.credits.filter((c) => c.id !== id);
+      await writeDb(db);
+      return NextResponse.json({ ok: true, db: sanitizeDbForRole(db, user) });
     }
 
     if (action === 'create_expense') {
@@ -345,14 +606,14 @@ export async function POST(request: Request) {
       };
 
       db.expenses.unshift(newExpense);
-      writeDb(db);
+      await writeDb(db);
       return NextResponse.json({ ok: true, db: sanitizeDbForRole(db, user), expense: newExpense });
     }
 
     if (action === 'delete_expense') {
       const { id } = payload;
       db.expenses = db.expenses.filter((e) => e.id !== id);
-      writeDb(db);
+      await writeDb(db);
       return NextResponse.json({ ok: true, db: sanitizeDbForRole(db, user) });
     }
 
@@ -423,7 +684,7 @@ export async function POST(request: Request) {
       };
 
       db.audits.unshift(auditRecord);
-      writeDb(db);
+      await writeDb(db);
       return NextResponse.json({ ok: true, db: sanitizeDbForRole(db, user), audit: auditRecord });
     }
 
@@ -488,7 +749,7 @@ export async function POST(request: Request) {
         db.users.push(newUser);
       }
 
-      writeDb(db);
+      await writeDb(db);
       return NextResponse.json({ ok: true, db: sanitizeDbForRole(db, user) });
     }
 
@@ -503,16 +764,15 @@ export async function POST(request: Request) {
       const idx = db.users.findIndex((u) => u.id === id);
       if (idx !== -1) {
         db.users[idx].active = !db.users[idx].active;
-        writeDb(db);
+        await writeDb(db);
       }
       return NextResponse.json({ ok: true, db: sanitizeDbForRole(db, user) });
     }
 
     if (action === 'reset_demo') {
       const seed = getInitialSeedData();
-      // Preserve existing users so nobody gets locked out
       seed.users = db.users;
-      writeDb(seed);
+      await writeDb(seed);
       return NextResponse.json({ ok: true, db: sanitizeDbForRole(seed, user) });
     }
 

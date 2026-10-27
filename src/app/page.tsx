@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
-  HeartPulse,
+  Coffee,
   LayoutGrid,
   ShoppingBag,
   Package,
@@ -19,11 +19,13 @@ import {
   ShieldCheck,
   UserCheck,
   Wifi,
+  CreditCard,
 } from 'lucide-react';
 import { CafeteriaDatabase, SaleTransaction, SessionUser } from '@/lib/types';
 import { formatLempira } from '@/lib/currency';
 import PosModule from '@/components/PosModule';
 import InventoryModule from '@/components/InventoryModule';
+import CreditsModule from '@/components/CreditsModule';
 import ExpensesModule from '@/components/ExpensesModule';
 import AuditAndReportsModule from '@/components/AuditAndReportsModule';
 import UsersAndLanModule from '@/components/UsersAndLanModule';
@@ -33,6 +35,7 @@ import LoginScreen from '@/components/LoginScreen';
 type ActiveSection =
   | 'pos'
   | 'inventario'
+  | 'creditos'
   | 'gastos'
   | 'reportes'
   | 'resumen'
@@ -42,6 +45,9 @@ export default function CafeteriaHomePage() {
   const [authChecked, setAuthChecked] = useState(false);
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
   const [lanUrls, setLanUrls] = useState<string[]>([]);
+  const [storageMode, setStorageMode] = useState<
+    'neon_postgres' | 'local_file' | 'serverless_tmp'
+  >('local_file');
   const [db, setDb] = useState<CafeteriaDatabase | null>(null);
   const [loadingDb, setLoadingDb] = useState(false);
   const [activeSection, setActiveSection] = useState<ActiveSection>('pos');
@@ -72,6 +78,9 @@ export default function CafeteriaHomePage() {
         const data = await res.json();
         if (data.lanUrls) {
           setLanUrls(data.lanUrls);
+        }
+        if (data.storageMode) {
+          setStorageMode(data.storageMode);
         }
         if (data.user) {
           setCurrentUser(data.user);
@@ -108,10 +117,13 @@ export default function CafeteriaHomePage() {
   const isAdmin = currentUser?.role === 'administrador';
 
   // Enforce strict role-based section access:
-  // Operador ONLY has access to Ventas ('pos') and Inventarios ('inventario')
+  // Operador has access to Ventas ('pos'), Inventarios ('inventario') and Créditos ('creditos')
   const safeSection: ActiveSection = useMemo(() => {
     if (!isAdmin) {
-      return activeSection === 'inventario' ? 'inventario' : 'pos';
+      if (activeSection === 'inventario' || activeSection === 'creditos') {
+        return activeSection;
+      }
+      return 'pos';
     }
     return activeSection;
   }, [isAdmin, activeSection]);
@@ -124,6 +136,8 @@ export default function CafeteriaHomePage() {
         totalExpenses: 0,
         totalWaste: 0,
         netProfit: 0,
+        pendingCreditsAmount: 0,
+        pendingCreditsCount: 0,
         lowStockItems: [],
       };
     }
@@ -146,6 +160,12 @@ export default function CafeteriaHomePage() {
       (totalSales - totalCogs - totalExpenses - totalWaste).toFixed(2)
     );
 
+    const creditsList = db.credits || [];
+    const pendingCreditsAmount = Number(
+      creditsList.reduce((acc, c) => acc + c.balance, 0).toFixed(2)
+    );
+    const pendingCreditsCount = creditsList.filter((c) => c.balance > 0).length;
+
     const lowStockItems = db.inventory.filter(
       (i) => i.trackDirectStock && i.currentStock <= i.minStock
     );
@@ -156,6 +176,8 @@ export default function CafeteriaHomePage() {
       totalExpenses,
       totalWaste,
       netProfit,
+      pendingCreditsAmount,
+      pendingCreditsCount,
       lowStockItems,
     };
   }, [db]);
@@ -173,6 +195,13 @@ export default function CafeteriaHomePage() {
         label: 'Ventas',
         shortLabel: 'Ventas',
         icon: ShoppingBag,
+      },
+      {
+        id: 'creditos',
+        label: 'Créditos',
+        shortLabel: 'Créditos',
+        icon: CreditCard,
+        badge: summary.pendingCreditsCount > 0 ? summary.pendingCreditsCount : undefined,
       },
       {
         id: 'inventario',
@@ -193,8 +222,8 @@ export default function CafeteriaHomePage() {
         },
         {
           id: 'reportes',
-          label: 'Ganancias',
-          shortLabel: 'Ganancia',
+          label: 'Reportes / Excel',
+          shortLabel: 'Reportes',
           icon: BarChart3,
         },
         {
@@ -205,15 +234,15 @@ export default function CafeteriaHomePage() {
         },
         {
           id: 'usuarios',
-          label: 'Usuarios / LAN',
-          shortLabel: 'Red/Usu.',
+          label: 'Usuarios / Red',
+          shortLabel: 'Usuarios',
           icon: Users,
         }
       );
     }
 
     return baseItems;
-  }, [isAdmin, summary.lowStockItems.length]);
+  }, [isAdmin, summary.lowStockItems.length, summary.pendingCreditsCount]);
 
   const handleResetDemo = async () => {
     if (!isAdmin) return;
@@ -232,7 +261,7 @@ export default function CafeteriaHomePage() {
       <div className="min-h-dvh flex items-center justify-center bg-[#F7F8F6]">
         <div className="text-center space-y-2.5">
           <div className="w-10 h-10 rounded-2xl bg-[#E8F0ED] text-[#3D6B5E] flex items-center justify-center mx-auto animate-pulse">
-            <HeartPulse className="w-5 h-5" />
+            <Coffee className="w-5 h-5" />
           </div>
           <p className="text-xs text-[#5C6B66]">Verificando sesión...</p>
         </div>
@@ -249,9 +278,9 @@ export default function CafeteriaHomePage() {
       <div className="min-h-dvh flex items-center justify-center bg-[#F7F8F6]">
         <div className="text-center space-y-2.5">
           <div className="w-10 h-10 rounded-2xl bg-[#E8F0ED] text-[#3D6B5E] flex items-center justify-center mx-auto animate-pulse">
-            <HeartPulse className="w-5 h-5" />
+            <Coffee className="w-5 h-5" />
           </div>
-          <p className="text-xs text-[#5C6B66]">Cargando módulos del sistema...</p>
+          <p className="text-xs text-[#5C6B66]">Cargando módulos de Camila&apos;s Coffee...</p>
         </div>
       </div>
     );
@@ -265,11 +294,11 @@ export default function CafeteriaHomePage() {
           {/* Brand */}
           <div className="flex items-center gap-2.5 min-w-0 shrink-0">
             <div className="w-8 h-8 rounded-xl bg-[#3D6B5E] text-white flex items-center justify-center shrink-0">
-              <HeartPulse className="w-4 h-4" />
+              <Coffee className="w-4 h-4" />
             </div>
             <div className="min-w-0">
               <h1 className="font-semibold text-sm sm:text-[15px] text-[#26302D] leading-tight truncate">
-                VitaliMarket & Café
+                Camila&apos;s Coffee
               </h1>
               <p className="text-[10px] text-[#6B7A74] hidden xl:block leading-tight">
                 Tienda y Cafetería Hospitalaria
@@ -311,10 +340,10 @@ export default function CafeteriaHomePage() {
                 type="button"
                 onClick={() => setActiveSection('usuarios')}
                 title={`Acceso LAN activo: ${lanUrls[0]}`}
-                className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#EEF5F2] text-[#2F574B] text-[11px] font-medium hover:bg-[#E1EDE8] transition-colors cursor-pointer"
+                className="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#EEF5F2] text-[#2F574B] text-[11px] font-medium hover:bg-[#E1EDE8] transition-colors cursor-pointer"
               >
                 <Wifi className="w-3.5 h-3.5" />
-                <span className="truncate max-w-[145px]">
+                <span className="truncate max-w-[140px]">
                   {lanUrls[0].replace(/^https?:\/\//, '')}
                 </span>
               </button>
@@ -335,7 +364,7 @@ export default function CafeteriaHomePage() {
               <div className="leading-tight">
                 <span className="font-semibold hidden sm:inline">{currentUser.fullName}</span>
                 <span className="font-semibold sm:hidden capitalize">{currentUser.role}</span>
-                <span className="hidden xl:inline text-[10px] opacity-80 ml-1.5 capitalize">
+                <span className="hidden 2xl:inline text-[10px] opacity-80 ml-1.5 capitalize">
                   ({currentUser.role})
                 </span>
               </div>
@@ -363,29 +392,40 @@ export default function CafeteriaHomePage() {
         </div>
       </header>
 
-      {/* Main Content Container (compact vertical spacing & safe bottom margin for mobile nav) */}
+      {/* Main Content Container */}
       <main className="flex-1 max-w-[1400px] w-full mx-auto px-3 sm:px-5 py-3.5 sm:py-5 pb-20 md:pb-6">
         {isAdmin && safeSection === 'resumen' && (
           <div className="space-y-5">
             {/* Compact Header */}
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="text-lg font-semibold text-[#26302D]">Resumen del Negocio</h2>
+                <h2 className="text-lg font-semibold text-[#26302D]">
+                  Resumen General — Camila&apos;s Coffee
+                </h2>
                 <p className="text-xs text-[#6B7A74]">
-                  Vista rápida de ventas, costos, utilidad neta y productos por reponer.
+                  Vista rápida de ventas, créditos por cobrar, costos, utilidad neta y reposición.
                 </p>
               </div>
-              <button
-                onClick={() => setActiveSection('pos')}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#3D6B5E] text-white text-xs sm:text-sm font-medium hover:bg-[#2F574B] transition-colors cursor-pointer"
-              >
-                <ShoppingBag className="w-4 h-4" />
-                Ir a Caja para Vender
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setActiveSection('reportes')}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-[#CFE0D8] text-[#2F574B] text-xs sm:text-sm font-semibold hover:bg-[#EEF5F2] transition-colors cursor-pointer"
+                >
+                  <BarChart3 className="w-4 h-4" />
+                  Reporte Mensual Excel
+                </button>
+                <button
+                  onClick={() => setActiveSection('pos')}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#3D6B5E] text-white text-xs sm:text-sm font-medium hover:bg-[#2F574B] transition-colors cursor-pointer"
+                >
+                  <ShoppingBag className="w-4 h-4" />
+                  Ir a Caja
+                </button>
+              </div>
             </div>
 
-            {/* 3 Compact KPI Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+            {/* 4 Compact KPI Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
               <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#E4E9E5]">
                 <div className="flex items-center justify-between text-[#6B7A74] text-xs mb-2">
                   <span>Ventas Totales</span>
@@ -399,6 +439,23 @@ export default function CafeteriaHomePage() {
                 </p>
               </div>
 
+              <div
+                onClick={() => setActiveSection('creditos')}
+                className="bg-[#FAF8F5] p-4 sm:p-5 rounded-2xl border border-[#EDE6D8] cursor-pointer hover:border-[#D9C8AA] transition-colors"
+              >
+                <div className="flex items-center justify-between text-[#9A6728] text-xs font-medium mb-2">
+                  <span>Créditos por Cobrar</span>
+                  <CreditCard className="w-4 h-4 text-[#9A6728]" />
+                </div>
+                <p className="text-2xl font-bold text-[#26302D]">
+                  {formatLempira(summary.pendingCreditsAmount)}
+                </p>
+                <p className="text-[11px] text-[#9A6728] mt-1">
+                  {summary.pendingCreditsCount} empleado
+                  {summary.pendingCreditsCount === 1 ? '' : 's'} con saldo pendiente →
+                </p>
+              </div>
+
               <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#E4E9E5]">
                 <div className="flex items-center justify-between text-[#6B7A74] text-xs mb-2">
                   <span>Costos, Gastos y Bajas</span>
@@ -408,7 +465,7 @@ export default function CafeteriaHomePage() {
                   {formatLempira(summary.totalCogs + summary.totalExpenses + summary.totalWaste)}
                 </p>
                 <p className="text-[11px] text-[#6B7A74] mt-1">
-                  Insumos: {formatLempira(summary.totalCogs)} • Gastos/Mermas:{' '}
+                  Insumos: {formatLempira(summary.totalCogs)} • Gastos:{' '}
                   {formatLempira(summary.totalExpenses + summary.totalWaste)}
                 </p>
               </div>
@@ -501,6 +558,7 @@ export default function CafeteriaHomePage() {
                           {sale.customerName}
                         </p>
                         <p className="text-[11px] text-[#6B7A74] truncate">
+                          {sale.paymentMethod} •{' '}
                           {sale.items.map((i) => `${i.quantity}x ${i.productName}`).join(', ')}
                         </p>
                       </div>
@@ -532,6 +590,14 @@ export default function CafeteriaHomePage() {
           />
         )}
 
+        {safeSection === 'creditos' && (
+          <CreditsModule
+            db={db}
+            currentUser={currentUser}
+            onRefresh={setDb}
+          />
+        )}
+
         {safeSection === 'inventario' && (
           <InventoryModule db={db} onRefresh={setDb} />
         )}
@@ -549,6 +615,7 @@ export default function CafeteriaHomePage() {
             db={db}
             currentUser={currentUser}
             lanUrls={lanUrls}
+            storageMode={storageMode}
             onRefresh={setDb}
           />
         )}
@@ -557,9 +624,11 @@ export default function CafeteriaHomePage() {
       {/* Mobile Bottom Navigation Bar (< md) */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-xs border-t border-[#E4E9E5] px-1.5 py-1">
         <div
-          className={`grid gap-1 ${
-            navItems.length === 2 ? 'grid-cols-2' : 'grid-cols-6'
-          }`}
+          className={
+            navItems.length === 3
+              ? 'grid grid-cols-3 gap-1'
+              : 'flex items-center gap-1 overflow-x-auto no-scrollbar'
+          }
         >
           {navItems.map((item) => {
             const Icon = item.icon;
@@ -569,7 +638,9 @@ export default function CafeteriaHomePage() {
                 key={item.id}
                 type="button"
                 onClick={() => setActiveSection(item.id)}
-                className={`relative flex flex-col items-center justify-center py-1.5 px-1 rounded-xl transition-colors cursor-pointer ${
+                className={`relative flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition-colors cursor-pointer ${
+                  navItems.length > 3 ? 'min-w-[64px] flex-1 shrink-0' : ''
+                } ${
                   active
                     ? 'bg-[#EEF5F2] text-[#2F574B] font-semibold'
                     : 'text-[#5C6B66] hover:text-[#26302D]'
@@ -580,7 +651,7 @@ export default function CafeteriaHomePage() {
                   {item.shortLabel}
                 </span>
                 {item.badge !== undefined && (
-                  <span className="absolute top-1 right-2 min-w-4 h-4 px-1 rounded-full text-[9px] font-bold bg-[#FDF5E8] text-[#9A6728] border border-[#EDE6D8] flex items-center justify-center">
+                  <span className="absolute top-1 right-1.5 min-w-4 h-4 px-1 rounded-full text-[9px] font-bold bg-[#FDF5E8] text-[#9A6728] border border-[#EDE6D8] flex items-center justify-center">
                     {item.badge}
                   </span>
                 )}

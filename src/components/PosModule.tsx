@@ -19,11 +19,14 @@ import {
   ChevronUp,
   X,
   Percent,
+  UserCheck,
+  UserPlus,
 } from 'lucide-react';
 import {
   CafeteriaDatabase,
   CustomerProfile,
   InventoryItem,
+  SalePaymentMethod,
   SaleTransaction,
 } from '@/lib/types';
 import { formatLempira } from '@/lib/currency';
@@ -51,7 +54,12 @@ export default function PosModule({ db, onRefresh, onShowReceipt }: PosModulePro
   const [customerProfile, setCustomerProfile] =
     useState<CustomerProfile>('Visitante / Familiar');
   const [paymentMethod, setPaymentMethod] =
-    useState<'Efectivo' | 'Tarjeta' | 'Transferencia'>('Efectivo');
+    useState<SalePaymentMethod>('Efectivo');
+  const [creditMode, setCreditMode] = useState<'existing' | 'new'>('existing');
+  const [selectedCreditId, setSelectedCreditId] = useState<string>('');
+  const [newEmpName, setNewEmpName] = useState('');
+  const [newEmpDept, setNewEmpDept] = useState('Enfermería');
+  const [newEmpPhone, setNewEmpPhone] = useState('');
   const [customerName, setCustomerName] = useState('Consumidor Final');
   const [customerRtn, setCustomerRtn] = useState('C/F');
   const [discountPercent, setDiscountPercent] = useState<string>('0');
@@ -170,6 +178,17 @@ export default function PosModule({ db, onRefresh, onShowReceipt }: PosModulePro
       return;
     }
 
+    if (paymentMethod === 'Crédito') {
+      if (creditMode === 'existing' && !selectedCreditId) {
+        setErrorMsg('Selecciona al empleado hospitalario para cargar el crédito.');
+        return;
+      }
+      if (creditMode === 'new' && !newEmpName.trim()) {
+        setErrorMsg('Ingresa el nombre del nuevo empleado para abrir su crédito.');
+        return;
+      }
+    }
+
     setSubmitting(true);
     setErrorMsg(null);
 
@@ -185,6 +204,18 @@ export default function PosModule({ db, onRefresh, onShowReceipt }: PosModulePro
             customerProfile,
             documentType,
             paymentMethod,
+            creditAccountId:
+              paymentMethod === 'Crédito' && creditMode === 'existing'
+                ? selectedCreditId
+                : undefined,
+            newCreditEmployee:
+              paymentMethod === 'Crédito' && creditMode === 'new'
+                ? {
+                    employeeName: newEmpName.trim(),
+                    department: newEmpDept.trim() || 'Personal Hospitalario',
+                    employeeCodeOrPhone: newEmpPhone.trim(),
+                  }
+                : undefined,
             discountPercent: numericDiscountPercent,
             amountReceived:
               paymentMethod === 'Efectivo' && numericReceived >= total ? numericReceived : total,
@@ -208,6 +239,10 @@ export default function PosModule({ db, onRefresh, onShowReceipt }: PosModulePro
         setNotes('');
         setCustomerName('Consumidor Final');
         setCustomerRtn('C/F');
+        setSelectedCreditId('');
+        setNewEmpName('');
+        setNewEmpPhone('');
+        setCreditMode('existing');
         setShowMoreOptions(false);
         setMobileCartOpen(false);
         onShowReceipt(data.sale);
@@ -363,35 +398,106 @@ export default function PosModule({ db, onRefresh, onShowReceipt }: PosModulePro
           </div>
         </div>
 
-        {/* Payment Method */}
+        {/* Payment Method (Efectivo, Tarjeta, Transferencia, Crédito) */}
         <div>
           <label className="block text-[11px] font-medium text-[#6B7A74] mb-1.5">
             Método de pago
           </label>
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-2 gap-1.5">
             {[
               { id: 'Efectivo', icon: Banknote },
               { id: 'Tarjeta', icon: CreditCard },
               { id: 'Transferencia', icon: Smartphone },
+              { id: 'Crédito', icon: UserCheck },
             ].map(({ id, icon: Icon }) => (
               <button
                 type="button"
                 key={id}
-                onClick={() =>
-                  setPaymentMethod(id as 'Efectivo' | 'Tarjeta' | 'Transferencia')
-                }
-                className={`flex items-center justify-center gap-1 py-2 px-1.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                onClick={() => setPaymentMethod(id as SalePaymentMethod)}
+                className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
                   paymentMethod === id
-                    ? 'bg-[#EEF5F2] border-[#3D6B5E] text-[#2F574B] font-semibold'
+                    ? id === 'Crédito'
+                      ? 'bg-[#FDF5E8] border-[#9A6728] text-[#9A6728] font-semibold'
+                      : 'bg-[#EEF5F2] border-[#3D6B5E] text-[#2F574B] font-semibold'
                     : 'bg-[#F7F8F6] border-[#E4E9E5] text-[#6B7A74]'
                 }`}
               >
                 <Icon className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">{id}</span>
+                <span className="truncate">{id === 'Crédito' ? 'Crédito Emp.' : id}</span>
               </button>
             ))}
           </div>
         </div>
+
+        {/* Employee Credit Selector (when paymentMethod === 'Crédito') */}
+        {paymentMethod === 'Crédito' && (
+          <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#EDE6D8] space-y-2.5 text-xs">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-semibold text-[#9A6728]">
+                Empleado del Hospital (Crédito)
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setCreditMode(creditMode === 'existing' ? 'new' : 'existing')
+                }
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#3D6B5E] hover:underline cursor-pointer"
+              >
+                {creditMode === 'existing' ? (
+                  <>
+                    <UserPlus className="w-3 h-3" /> + Nuevo empleado
+                  </>
+                ) : (
+                  'Elegir registrado'
+                )}
+              </button>
+            </div>
+
+            {creditMode === 'existing' ? (
+              <div>
+                <select
+                  value={selectedCreditId}
+                  onChange={(e) => setSelectedCreditId(e.target.value)}
+                  className="w-full px-2.5 py-2 rounded-lg bg-white border border-[#DCE2DD] text-xs font-medium text-[#26302D]"
+                >
+                  <option value="">— Selecciona al empleado —</option>
+                  {(db.credits || []).map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.employeeName} ({acc.department}) • Saldo:{' '}
+                      {formatLempira(acc.balance)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={newEmpName}
+                  onChange={(e) => setNewEmpName(e.target.value)}
+                  placeholder="Nombre completo del empleado *"
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-[#DCE2DD]"
+                />
+                <div className="grid grid-cols-2 gap-1.5">
+                  <input
+                    type="text"
+                    value={newEmpDept}
+                    onChange={(e) => setNewEmpDept(e.target.value)}
+                    placeholder="Área (ej. Enfermería)"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-[#DCE2DD]"
+                  />
+                  <input
+                    type="text"
+                    value={newEmpPhone}
+                    onChange={(e) => setNewEmpPhone(e.target.value)}
+                    placeholder="Teléfono / Código"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-[#DCE2DD]"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Cash Quick Change Calculator */}
         {paymentMethod === 'Efectivo' && cart.length > 0 && (
@@ -512,7 +618,9 @@ export default function PosModule({ db, onRefresh, onShowReceipt }: PosModulePro
         )}
 
         <div className="flex justify-between items-center">
-          <span className="text-xs font-medium text-[#6B7A74]">Total a cobrar</span>
+          <span className="text-xs font-medium text-[#6B7A74]">
+            {paymentMethod === 'Crédito' ? 'Total al crédito' : 'Total a cobrar'}
+          </span>
           <span className="text-xl font-bold text-[#26302D]">
             {formatLempira(total)}
           </span>
@@ -521,14 +629,22 @@ export default function PosModule({ db, onRefresh, onShowReceipt }: PosModulePro
         <button
           type="submit"
           disabled={cart.length === 0 || submitting}
-          className="w-full py-2.5 px-4 rounded-xl bg-[#3D6B5E] text-white font-semibold text-sm hover:bg-[#2F574B] disabled:opacity-40 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+          className={`w-full py-2.5 px-4 rounded-xl text-white font-semibold text-sm disabled:opacity-40 transition-colors flex items-center justify-center gap-2 cursor-pointer ${
+            paymentMethod === 'Crédito'
+              ? 'bg-[#9A6728] hover:bg-[#7F541F]'
+              : 'bg-[#3D6B5E] hover:bg-[#2F574B]'
+          }`}
         >
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>
             {submitting
               ? 'Procesando...'
               : cart.length > 0
-              ? `Cobrar Venta (${formatLempira(total)})`
+              ? paymentMethod === 'Crédito'
+                ? `Cargar a Crédito (${formatLempira(total)})`
+                : `Cobrar Venta (${formatLempira(total)})`
+              : paymentMethod === 'Crédito'
+              ? 'Cargar a Crédito'
               : 'Cobrar Venta'}
           </span>
         </button>

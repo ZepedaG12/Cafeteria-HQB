@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import {
-  HeartPulse,
+  Coffee,
   Lock,
   User,
   Eye,
@@ -62,9 +62,9 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
         {/* Header */}
         <div className="px-6 pt-6 pb-4 text-center border-b border-[#F2F5F3]">
           <div className="w-11 h-11 rounded-2xl bg-[#3D6B5E] text-white flex items-center justify-center mx-auto mb-3 shadow-xs">
-            <HeartPulse className="w-6 h-6" />
+            <Coffee className="w-6 h-6" />
           </div>
-          <h1 className="text-lg font-bold text-[#26302D]">VitaliMarket & Café</h1>
+          <h1 className="text-lg font-bold text-[#26302D]">Camila&apos;s Coffee</h1>
           <p className="text-xs text-[#5C6B66] mt-0.5">
             Tienda y Cafetería Hospitalaria • Acceso al Sistema
           </p>

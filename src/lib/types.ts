@@ -102,6 +102,12 @@ export type CustomerProfile =
   | 'Paciente / Habitación'
   | 'Público General';
 
+export type SalePaymentMethod =
+  | 'Efectivo'
+  | 'Tarjeta'
+  | 'Transferencia'
+  | 'Crédito';
+
 export interface SaleTransaction {
   id: string;
   invoiceNumber: string;
@@ -110,7 +116,8 @@ export interface SaleTransaction {
   customerRtn: string;
   customerProfile?: CustomerProfile;
   documentType: 'Ticket' | 'Factura';
-  paymentMethod: 'Efectivo' | 'Tarjeta' | 'Transferencia';
+  paymentMethod: SalePaymentMethod;
+  creditAccountId?: string;
   items: SaleItemDetail[];
   subtotal: number;
   discountPercent?: number;
@@ -121,6 +128,41 @@ export interface SaleTransaction {
   changeGiven: number;
   cashier: string;
   notes?: string;
+}
+
+export interface CreditChargeRecord {
+  id: string;
+  date: string;
+  saleId?: string;
+  invoiceNumber?: string;
+  description: string;
+  amount: number;
+  createdBy: string;
+}
+
+export interface CreditPaymentRecord {
+  id: string;
+  date: string;
+  amount: number;
+  paymentMethod: 'Efectivo' | 'Tarjeta' | 'Transferencia';
+  notes?: string;
+  receivedBy: string;
+}
+
+export interface EmployeeCreditAccount {
+  id: string;
+  employeeName: string;
+  department: string;
+  employeeCodeOrPhone?: string;
+  creditLimit?: number;
+  totalCharged: number;
+  totalPaid: number;
+  balance: number;
+  charges: CreditChargeRecord[];
+  payments: CreditPaymentRecord[];
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type ExpenseCategory =
@@ -172,4 +214,5 @@ export interface CafeteriaDatabase {
   sales: SaleTransaction[];
   expenses: OperatingExpense[];
   audits: PhysicalAuditRecord[];
+  credits: EmployeeCreditAccount[];
 }

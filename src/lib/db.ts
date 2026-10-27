@@ -1,8 +1,9 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { neon } from '@neondatabase/serverless';
 import { hashPassword } from './auth';
-import { CafeteriaDatabase, UserAccount } from './types';
+import { CafeteriaDatabase, EmployeeCreditAccount, UserAccount } from './types';
 
 const IS_SERVERLESS = Boolean(
   process.env.VERCEL ||
@@ -11,11 +12,27 @@ const IS_SERVERLESS = Boolean(
 );
 
 const DATA_DIR = IS_SERVERLESS
-  ? path.join(os.tmpdir(), 'vitalimarket-data')
+  ? path.join(os.tmpdir(), 'camilas-coffee-data')
   : path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'cafeteria-hospital-db.json');
 
 let memoryFallbackDb: CafeteriaDatabase | null = null;
+let neonTableInitialized = false;
+
+export function getDatabaseUrl(): string | null {
+  const url =
+    process.env.DATABASE_URL ||
+    process.env.POSTGRES_URL ||
+    process.env.NEON_DATABASE_URL ||
+    '';
+  return url.trim() ? url.trim() : null;
+}
+
+export function getStorageMode(): 'neon_postgres' | 'local_file' | 'serverless_tmp' {
+  if (getDatabaseUrl()) return 'neon_postgres';
+  if (IS_SERVERLESS) return 'serverless_tmp';
+  return 'local_file';
+}
 
 export function getDefaultUsers(): UserAccount[] {
   return [
@@ -40,9 +57,81 @@ export function getDefaultUsers(): UserAccount[] {
   ];
 }
 
+export function getDefaultCredits(): EmployeeCreditAccount[] {
+  return [
+    {
+      id: 'cred-emp-001',
+      employeeName: 'Dra. Sofía Méndez',
+      department: 'Emergencias',
+      employeeCodeOrPhone: '9988-1122',
+      creditLimit: 1500,
+      totalCharged: 363.0,
+      totalPaid: 150.0,
+      balance: 213.0,
+      charges: [
+        {
+          id: 'chg-001',
+          date: '2026-10-23T08:15:00.000Z',
+          saleId: 'sale-005',
+          invoiceNumber: 'TIC-2026-0005',
+          description: '2x Café con Leche Deslactosada 12oz, 2x Sándwich Club de Pavo, 1x Barra Nutritiva',
+          amount: 363.0,
+          createdBy: 'Laura (Operadora de Caja)',
+        },
+      ],
+      payments: [
+        {
+          id: 'pay-001',
+          date: '2026-10-25T14:20:00.000Z',
+          amount: 150.0,
+          paymentMethod: 'Efectivo',
+          notes: 'Primer abono quincenal en caja',
+          receivedBy: 'Laura (Operadora de Caja)',
+        },
+      ],
+      active: true,
+      createdAt: '2026-10-23T08:15:00.000Z',
+      updatedAt: '2026-10-25T14:20:00.000Z',
+    },
+    {
+      id: 'cred-emp-002',
+      employeeName: 'Lic. Roberto Pineda',
+      department: 'Enfermería Piso 2',
+      employeeCodeOrPhone: '9845-3344',
+      creditLimit: 1000,
+      totalCharged: 196.0,
+      totalPaid: 196.0,
+      balance: 0,
+      charges: [
+        {
+          id: 'chg-002',
+          date: '2026-10-22T19:00:00.000Z',
+          description: '2x Panini Caliente de Jamón de Pavo y Mozzarella',
+          amount: 196.0,
+          createdBy: 'Laura (Operadora de Caja)',
+        },
+      ],
+      payments: [
+        {
+          id: 'pay-002',
+          date: '2026-10-24T12:10:00.000Z',
+          amount: 196.0,
+          paymentMethod: 'Transferencia',
+          notes: 'Cancelación total por transferencia',
+          receivedBy: 'Administrador General',
+        },
+      ],
+      active: true,
+      createdAt: '2026-10-22T19:00:00.000Z',
+      updatedAt: '2026-10-24T12:10:00.000Z',
+    },
+  ];
+}
+
 export function getInitialSeedData(): CafeteriaDatabase {
   return {
     users: getDefaultUsers(),
+    credits: getDefaultCredits(),
     inventory: [
       // INSUMOS Y EMPAQUES DE BARRA / COCINA (EN LEMPIRAS - HNL)
       {
@@ -98,7 +187,7 @@ export function getInitialSeedData(): CafeteriaDatabase {
         category: 'Insumos y Materias Primas',
         unit: 'unid',
         currentStock: 38,
-        minStock: 45, // Alerta de stock bajo
+        minStock: 45,
         unitCost: 3.8,
         salePrice: 0,
         trackDirectStock: true,
@@ -106,7 +195,7 @@ export function getInitialSeedData(): CafeteriaDatabase {
         active: true,
       },
 
-      // COMIDAS PREPARADAS Y SÁNDWICHES (ALTA ROTACIÓN EN HOSPITAL)
+      // COMIDAS PREPARADAS Y SÁNDWICHES
       {
         id: 'prod-001',
         code: 'COM-001',
@@ -160,7 +249,7 @@ export function getInitialSeedData(): CafeteriaDatabase {
         category: 'Comidas y Sándwiches',
         unit: 'unid',
         currentStock: 4,
-        minStock: 6, // En alerta de stock bajo
+        minStock: 6,
         unitCost: 45.0,
         salePrice: 98.0,
         trackDirectStock: true,
@@ -215,7 +304,7 @@ export function getInitialSeedData(): CafeteriaDatabase {
         active: true,
       },
 
-      // CAFETERÍA Y TÉS CALIENTES (CON RECETA AUTOMÁTICA)
+      // CAFETERÍA Y TÉS CALIENTES
       {
         id: 'prod-008',
         code: 'CAF-001',
@@ -408,7 +497,7 @@ export function getInitialSeedData(): CafeteriaDatabase {
         category: 'Higiene y Uso Personal',
         unit: 'unid',
         currentStock: 4,
-        minStock: 8, // En alerta de stock bajo
+        minStock: 8,
         unitCost: 16.0,
         salePrice: 40.0,
         trackDirectStock: true,
@@ -700,6 +789,52 @@ export function getInitialSeedData(): CafeteriaDatabase {
         cashier: 'Carlos (Guardia Nocturna)',
         notes: 'Ventas nocturnas de cafetería y mascarillas para ingreso a visita',
       },
+      {
+        id: 'sale-005',
+        invoiceNumber: 'TIC-2026-0005',
+        date: '2026-10-23T08:15:00.000Z',
+        customerName: 'Dra. Sofía Méndez',
+        customerRtn: 'C/F',
+        customerProfile: 'Personal Médico / Staff',
+        documentType: 'Ticket',
+        paymentMethod: 'Crédito',
+        creditAccountId: 'cred-emp-001',
+        items: [
+          {
+            productId: 'prod-008',
+            productName: 'Café con Leche Deslactosada 12oz',
+            quantity: 2,
+            unitPrice: 68.0,
+            unitCost: 21.5,
+            subtotal: 136.0,
+          },
+          {
+            productId: 'prod-001',
+            productName: 'Sándwich Club de Pavo, Queso y Pan Integral',
+            quantity: 2,
+            unitPrice: 95.0,
+            unitCost: 42.0,
+            subtotal: 190.0,
+          },
+          {
+            productId: 'prod-012',
+            productName: 'Barra Nutritiva de Avena, Miel y Almendras',
+            quantity: 1,
+            unitPrice: 38.0,
+            unitCost: 16.0,
+            subtotal: 38.0,
+          },
+        ],
+        subtotal: 364.0,
+        discountPercent: 0,
+        discount: 1.0,
+        total: 363.0,
+        estimatedCost: 143.0,
+        amountReceived: 0,
+        changeGiven: 0,
+        cashier: 'Laura (Operadora de Caja)',
+        notes: 'Crédito personal médico Emergencias',
+      },
     ],
     expenses: [
       {
@@ -781,7 +916,82 @@ export function getInitialSeedData(): CafeteriaDatabase {
   };
 }
 
-export function readDb(): CafeteriaDatabase {
+function normalizeParsedDb(parsed: CafeteriaDatabase): {
+  db: CafeteriaDatabase;
+  mutated: boolean;
+} {
+  let mutated = false;
+
+  if (!Array.isArray(parsed.users) || parsed.users.length === 0) {
+    parsed.users = getDefaultUsers();
+    mutated = true;
+  }
+
+  if (!Array.isArray(parsed.credits)) {
+    parsed.credits = getDefaultCredits();
+    mutated = true;
+  }
+
+  if (Array.isArray(parsed.sales)) {
+    for (const s of parsed.sales as unknown as Array<Record<string, unknown>>) {
+      if (s.customerRtn === undefined) {
+        s.customerRtn =
+          typeof s.customerNit === 'string' && s.customerNit ? s.customerNit : 'C/F';
+        delete s.customerNit;
+        mutated = true;
+      }
+    }
+  }
+
+  return { db: parsed, mutated };
+}
+
+export async function readDb(): Promise<CafeteriaDatabase> {
+  const dbUrl = getDatabaseUrl();
+
+  // 1. Modo Nube Permanente: Neon Postgres (Vercel / Producción)
+  if (dbUrl) {
+    try {
+      const sql = neon(dbUrl);
+      if (!neonTableInitialized) {
+        await sql`
+          CREATE TABLE IF NOT EXISTS camilas_coffee_store (
+            id TEXT PRIMARY KEY,
+            data JSONB NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )
+        `;
+        neonTableInitialized = true;
+      }
+
+      const rows = await sql`
+        SELECT data FROM camilas_coffee_store WHERE id = 'main' LIMIT 1
+      `;
+
+      if (!rows || rows.length === 0) {
+        const seed = getInitialSeedData();
+        const jsonStr = JSON.stringify(seed);
+        await sql`
+          INSERT INTO camilas_coffee_store (id, data, updated_at)
+          VALUES ('main', ${jsonStr}::jsonb, NOW())
+          ON CONFLICT (id) DO NOTHING
+        `;
+        return seed;
+      }
+
+      const rawData = rows[0].data as CafeteriaDatabase;
+      const { db, mutated } = normalizeParsedDb(rawData);
+      if (mutated) {
+        await writeDb(db);
+      }
+      return db;
+    } catch (err) {
+      console.error('Error conectando a Neon Postgres:', err);
+      throw new Error('Error de conexión con la base de datos Neon Postgres.');
+    }
+  }
+
+  // 2. Modo Local (LAN) o Fallback Temporal (/tmp)
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -789,36 +999,21 @@ export function readDb(): CafeteriaDatabase {
     if (!fs.existsSync(DB_FILE)) {
       const seed = getInitialSeedData();
       fs.writeFileSync(DB_FILE, JSON.stringify(seed, null, 2), 'utf-8');
+      memoryFallbackDb = seed;
       return seed;
     }
     const raw = fs.readFileSync(DB_FILE, 'utf-8');
     const parsed = JSON.parse(raw) as CafeteriaDatabase;
-    let mutated = false;
-
-    if (!Array.isArray(parsed.users) || parsed.users.length === 0) {
-      parsed.users = getDefaultUsers();
-      mutated = true;
-    }
-
-    // Normalizar registros antiguos que tuvieran customerNit en lugar de customerRtn
-    if (Array.isArray(parsed.sales)) {
-      for (const s of parsed.sales as unknown as Array<Record<string, unknown>>) {
-        if (s.customerRtn === undefined) {
-          s.customerRtn = typeof s.customerNit === 'string' && s.customerNit ? s.customerNit : 'C/F';
-          delete s.customerNit;
-          mutated = true;
-        }
-      }
-    }
+    const { db, mutated } = normalizeParsedDb(parsed);
 
     if (mutated) {
-      writeDb(parsed);
+      await writeDb(db);
     }
 
-    memoryFallbackDb = parsed;
-    return parsed;
+    memoryFallbackDb = db;
+    return db;
   } catch (err) {
-    console.error('Error reading DB, using memory/seed fallback:', err);
+    console.error('Error reading local DB, using memory/seed fallback:', err);
     if (!memoryFallbackDb) {
       memoryFallbackDb = getInitialSeedData();
     }
@@ -826,7 +1021,31 @@ export function readDb(): CafeteriaDatabase {
   }
 }
 
-export function writeDb(data: CafeteriaDatabase): void {
+export async function writeDb(data: CafeteriaDatabase): Promise<void> {
+  const dbUrl = getDatabaseUrl();
+
+  if (dbUrl) {
+    const sql = neon(dbUrl);
+    if (!neonTableInitialized) {
+      await sql`
+        CREATE TABLE IF NOT EXISTS camilas_coffee_store (
+          id TEXT PRIMARY KEY,
+          data JSONB NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `;
+      neonTableInitialized = true;
+    }
+    const jsonStr = JSON.stringify(data);
+    await sql`
+      INSERT INTO camilas_coffee_store (id, data, updated_at)
+      VALUES ('main', ${jsonStr}::jsonb, NOW())
+      ON CONFLICT (id) DO UPDATE
+      SET data = EXCLUDED.data, updated_at = NOW()
+    `;
+    return;
+  }
+
   memoryFallbackDb = data;
   try {
     if (!fs.existsSync(DATA_DIR)) {

@@ -6,19 +6,29 @@ import {
   hashPassword,
   SESSION_COOKIE_NAME,
 } from '@/lib/auth';
-import { readDb } from '@/lib/db';
+import { getStorageMode, readDb } from '@/lib/db';
 import { SessionUser } from '@/lib/types';
 
 export async function GET() {
   const session = await getSessionUser();
+  const storageMode = getStorageMode();
+
   if (!session) {
-    return NextResponse.json({ user: null, lanUrls: getLanUrls(3000) });
+    return NextResponse.json({
+      user: null,
+      lanUrls: getLanUrls(3000),
+      storageMode,
+    });
   }
 
-  const db = readDb();
+  const db = await readDb();
   const dbUser = db.users.find((u) => u.id === session.id && u.active);
   if (!dbUser) {
-    const res = NextResponse.json({ user: null, lanUrls: getLanUrls(3000) });
+    const res = NextResponse.json({
+      user: null,
+      lanUrls: getLanUrls(3000),
+      storageMode,
+    });
     res.cookies.delete(SESSION_COOKIE_NAME);
     return res;
   }
@@ -33,6 +43,7 @@ export async function GET() {
   return NextResponse.json({
     user: currentUser,
     lanUrls: getLanUrls(3000),
+    storageMode,
   });
 }
 
@@ -58,7 +69,7 @@ export async function POST(request: Request) {
         );
       }
 
-      const db = readDb();
+      const db = await readDb();
       const found = db.users.find(
         (u) => u.username.toLowerCase() === cleanUser && u.active
       );
@@ -82,9 +93,9 @@ export async function POST(request: Request) {
         ok: true,
         user: sessionUser,
         lanUrls: getLanUrls(3000),
+        storageMode: getStorageMode(),
       });
 
-      // Important: Do NOT set secure: true so HTTP LAN access from tablets/phones works seamlessly
       res.cookies.set(SESSION_COOKIE_NAME, token, {
         httpOnly: true,
         sameSite: 'lax',
@@ -98,7 +109,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Acción inválida.' }, { status: 400 });
   } catch {
     return NextResponse.json(
-      { error: 'Error al procesar autenticación.' },
+      { error: 'Error procesando autenticación.' },
       { status: 500 }
     );
   }

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Printer, X, CheckCircle2, HeartPulse } from 'lucide-react';
+import { Printer, X, CheckCircle2, Coffee } from 'lucide-react';
 import { SaleTransaction } from '@/lib/types';
 import { formatLempira } from '@/lib/currency';
 
@@ -17,6 +17,8 @@ export default function ReceiptModal({ sale, onClose }: ReceiptModalProps) {
     dateStyle: 'medium',
     timeStyle: 'short',
   });
+
+  const isCredit = sale.paymentMethod === 'Crédito';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#26302D]/45 backdrop-blur-[2px] p-3 sm:p-4">
@@ -43,9 +45,9 @@ export default function ReceiptModal({ sale, onClose }: ReceiptModalProps) {
         >
           <div className="text-center border-b border-dashed border-[#CBD4CE] pb-3 mb-3">
             <div className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-[#E8F0ED] text-[#3D6B5E] mb-1.5">
-              <HeartPulse className="w-4 h-4" />
+              <Coffee className="w-4 h-4" />
             </div>
-            <h3 className="font-bold text-base tracking-tight">VITALIMARKET & CAFÉ</h3>
+            <h3 className="font-bold text-base tracking-tight">CAMILA&apos;S COFFEE</h3>
             <p className="text-[11px] text-[#5C6B66]">
               Tienda y Cafetería Hospitalaria
             </p>
@@ -58,14 +60,20 @@ export default function ReceiptModal({ sale, onClose }: ReceiptModalProps) {
             <div className="text-[#5C6B66]">Fecha y Hora:</div>
             <div className="text-right font-medium">{formattedDate}</div>
 
-            <div className="text-[#5C6B66]">Cliente:</div>
+            <div className="text-[#5C6B66]">{isCredit ? 'Empleado:' : 'Cliente:'}</div>
             <div className="text-right font-medium truncate pl-2">{sale.customerName}</div>
 
             <div className="text-[#5C6B66]">RTN:</div>
             <div className="text-right font-medium">{sale.customerRtn || 'C/F'}</div>
 
-            <div className="text-[#5C6B66]">Pago:</div>
-            <div className="text-right font-medium">{sale.paymentMethod}</div>
+            <div className="text-[#5C6B66]">Modalidad Pago:</div>
+            <div
+              className={`text-right font-semibold ${
+                isCredit ? 'text-[#9A6728]' : ''
+              }`}
+            >
+              {isCredit ? 'CRÉDITO EMPLEADO' : sale.paymentMethod}
+            </div>
 
             <div className="text-[#5C6B66]">Atendió:</div>
             <div className="text-right font-medium truncate pl-2">{sale.cashier}</div>
@@ -111,7 +119,7 @@ export default function ReceiptModal({ sale, onClose }: ReceiptModalProps) {
               </div>
             )}
             <div className="flex justify-between text-sm font-bold text-[#26302D] pt-1 border-t border-[#DCE2DD]">
-              <span>TOTAL PAGADO:</span>
+              <span>{isCredit ? 'TOTAL A CRÉDITO:' : 'TOTAL PAGADO:'}</span>
               <span>{formatLempira(sale.total)}</span>
             </div>
             {sale.paymentMethod === 'Efectivo' && (
@@ -131,6 +139,20 @@ export default function ReceiptModal({ sale, onClose }: ReceiptModalProps) {
           {sale.notes && (
             <div className="mt-2.5 p-2 rounded-lg bg-[#F7F8F6] text-[11px] text-[#5C6B66]">
               <strong>Nota:</strong> {sale.notes}
+            </div>
+          )}
+
+          {isCredit && (
+            <div className="mt-4 pt-3 border-t border-dashed border-[#CBD4CE] text-center space-y-3">
+              <p className="text-[10px] font-semibold text-[#9A6728] uppercase">
+                Cargo registrado en cuenta de crédito de empleado
+              </p>
+              <div className="pt-5">
+                <div className="w-48 mx-auto border-b border-[#5C6B66]" />
+                <p className="text-[10px] text-[#5C6B66] mt-1">
+                  Firma de conformidad ({sale.customerName})
+                </p>
+              </div>
             </div>
           )}
         </div>
